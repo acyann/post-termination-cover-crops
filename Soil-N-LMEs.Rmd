@@ -1,0 +1,225 @@
+---
+title: "Soil-N-LMEs"
+author: "Eleanor Lucadamo"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+## Load packages
+
+```{r load packages}
+
+library(nlme)
+library(multcomp)
+library(multcompView)
+
+```
+
+
+## Load data
+
+```{r load/clean data}
+
+# soil data with all time points
+soil.N <- read.csv(file = "METADATA.csv", header = TRUE)
+
+```
+
+```{r clean soil.N data and subset}
+
+# subset soil.N to remove NA values in PMN and clean
+dat <- subset(soil.N, !is.na(soil.N$PMN))
+
+# set Year, SampleDate, and Rep as factors
+dat$Year <- factor(dat$Year)
+dat$SampleDate <- factor(dat$SampleDate)
+dat$Rep <- factor(dat$Rep)
+dat$Type <- factor(dat$Type)
+
+# create TypeSamplePeriod as interaction of Type and SamplePeriod
+dat$TypeSamplePeriod <- interaction(dat$Type, dat$SamplePeriod)
+
+# order by SamplePeriod
+dat$SamplePeriod <- ordered(dat$SamplePeriod, levels = c("AOne week", "Two weeks", "Four weeks"))
+
+# subset soil.N (dat) into three sample dates
+Soil.N.1 <- subset(dat, SamplePeriod == "AOne week")
+Soil.N.2 <- subset(dat, SamplePeriod == "Two weeks")
+Soil.N.4 <- subset(dat, SamplePeriod == "Four weeks")
+```
+
+
+
+## Linear mixed-effects models and Tukey tests, Year/Site/Rep = random effect
+
+```{r NO3 LME}
+
+# by sample date: week 1 (intercept = control)
+mod <-lme(NO3 ~ Type, data = Soil.N.1, random = ~ 1|Year/Site/Rep, method='ML')        
+summary(mod)
+# Fixed effects: NO3 ~ Type 
+#                  Value Std.Error  DF   t-value p-value
+# (Intercept)  18.559879  5.359447 216  3.463022  0.0006
+# Typebrassica -6.399896  1.262772 216 -5.068132  0.0000
+# Typegrass    -5.623934  1.331842 216 -4.222675  0.0000
+# Typelegume   -3.256590  1.331842 216 -2.445178  0.0153
+# Typemix      -4.085954  1.162966 216 -3.513390  0.0005
+# Typeweed     -4.400074  1.445346 216 -3.044304  0.0026
+
+tuk <- cld(glht(mod, linfct = mcp(Type = "Tukey")))
+tuk
+# acontrol brassica    grass   legume      mix     weed 
+#      "c"      "a"     "ab"     "bc"     "ab"     "ab" 
+
+# by sample date: week 2 (intercept = control)
+mod <-lme(NO3 ~ Type, data = Soil.N.2, random = ~ 1|Year/Site/Rep, method='ML')
+summary(mod)
+# Fixed effects: NO3 ~ Type 
+#                  Value Std.Error  DF   t-value p-value
+# (Intercept)  13.127083  1.479911 110  8.870184  0.0000
+# Typebrassica -1.981667  1.111403 110 -1.783032  0.0773
+# Typegrass    -0.892213  1.237151 110 -0.721183  0.4723
+# Typelegume    0.969037  1.237151 110  0.783281  0.4351
+# Typemix      -0.155531  1.059936 110 -0.146736  0.8836
+# Typeweed     -1.638333  1.283337 110 -1.276620  0.2044
+
+tuk <- cld(glht(mod, linfct = mcp(Type = "Tukey")))
+tuk
+# acontrol brassica    grass   legume      mix     weed 
+#     "ab"      "a"     "ab"      "b"     "ab"     "ab" 
+
+# by sample date: week 4 (intercept = control)
+mod <-lme(NO3 ~ Type, data = Soil.N.4, random = ~ 1|Year/Site/Rep, method='ML')
+summary(mod)
+# Fixed effects: NO3 ~ Type 
+#                  Value Std.Error  DF   t-value p-value
+# (Intercept)   9.956250  2.827266 163  3.521512  0.0006
+# Typebrassica  0.563437  1.190323 163  0.473348  0.6366
+# Typegrass     1.609600  1.278358 163  1.259116  0.2098
+# Typelegume   -0.159567  1.278358 163 -0.124822  0.9008
+# Typemix       1.328697  1.101992 163  1.205724  0.2297
+# Typeweed      1.815313  1.374466 163  1.320740  0.1884
+
+tuk <- cld(glht(mod, linfct = mcp(Type = "Tukey")))
+tuk
+# acontrol brassica    grass   legume      mix     weed 
+#      "a"      "a"      "a"      "a"      "a"      "a" 
+```
+
+```{r NH4 LME}
+
+# by sample date: week 1 (intercept = control)
+mod <-lme(NH4 ~ Type, data = Soil.N.1, random = ~ 1|Year/Site/Rep, method='ML')
+summary(mod)
+# Fixed effects: NH4 ~ Type 
+#                  Value Std.Error  DF   t-value p-value
+# (Intercept)   7.291002 0.8605986 216  8.472012  0.0000
+# Typebrassica -0.972192 0.5358486 216 -1.814303  0.0710
+# Typegrass    -0.468648 0.5595544 216 -0.837537  0.4032
+# Typelegume   -1.357710 0.5595544 216 -2.426413  0.0161
+# Typemix      -0.821110 0.4869899 216 -1.686093  0.0932
+# Typeweed     -0.977129 0.6134060 216 -1.592957  0.1126
+
+tuk <- cld(glht(mod, linfct = mcp(Type = "Tukey")))
+tuk
+# acontrol brassica    grass   legume      mix     weed 
+#      "a"      "a"      "a"      "a"      "a"      "a" 
+
+
+# by sample date: week 2 (intercept = control)
+mod <-lme(NH4 ~ Type, data = Soil.N.2, random = ~ 1|Year/Site/Rep, method='ML')
+summary(mod)
+# Fixed effects: NH4 ~ Type 
+#                  Value Std.Error  DF   t-value p-value
+# (Intercept)   7.190833 1.1199899 110  6.420445  0.0000
+# Typebrassica -0.064583 0.4934497 110 -0.130881  0.8961
+# Typegrass    -0.042566 0.5510342 110 -0.077248  0.9386
+# Typelegume    0.255246 0.5510342 110  0.463213  0.6441
+# Typemix       0.178332 0.4726402 110  0.377309  0.7067
+# Typeweed     -0.110000 0.5697866 110 -0.193055  0.8473
+
+tuk <- cld(glht(mod, linfct = mcp(Type = "Tukey")))
+tuk
+# acontrol brassica    grass   legume      mix     weed 
+#      "a"      "a"      "a"      "a"      "a"      "a" 
+
+
+# by sample date: week 4 (intercept = control)
+mod <-lme(NH4 ~ Type, data = Soil.N.4, random = ~ 1|Year/Site/Rep, method='ML')
+summary(mod)
+# Fixed effects: NH4 ~ Type 
+#                  Value Std.Error  DF   t-value p-value
+# (Intercept)   5.912500 0.9416292 163  6.279011  0.0000
+# Typebrassica -0.394219 0.4239027 163 -0.929975  0.3538
+# Typegrass    -0.346901 0.4533518 163 -0.765192  0.4453
+# Typelegume   -0.332943 0.4533518 163 -0.734403  0.4638
+# Typemix      -0.186832 0.3902376 163 -0.478764  0.6327
+# Typeweed      0.085938 0.4894806 163  0.175569  0.8609
+
+tuk <- cld(glht(mod, linfct = mcp(Type = "Tukey")))
+tuk
+# acontrol brassica    grass   legume      mix     weed 
+#      "a"      "a"      "a"      "a"      "a"      "a" 
+```
+
+```{r PMN LME}
+
+# by sample date: week 1 (intercept = control)
+mod <-lme(PMN ~ Type, data = Soil.N.1, random = ~ 1|Year/Site/Rep, method='ML')
+summary(mod)
+# Fixed effects: PMN ~ Type 
+#                 Value Std.Error  DF   t-value p-value
+# (Intercept)  58.74011  4.131615 216 14.217227  0.0000
+# Typebrassica  9.88096  3.942311 216  2.506388  0.0129
+# Typegrass    10.85940  4.138079 216  2.624262  0.0093
+# Typelegume    9.29409  4.138079 216  2.245992  0.0257
+# Typemix      12.86007  3.608133 216  3.564189  0.0004
+# Typeweed     10.54360  4.512137 216  2.336719  0.0204
+
+tuk <- cld(glht(mod, linfct = mcp(Type = "Tukey")))
+tuk
+# acontrol brassica    grass   legume      mix     weed 
+#      "a"     "ab"     "ab"     "ab"      "b"     "ab" 
+
+# by sample date: week 2 (intercept = control)
+mod <-lme(PMN ~ Type, data = Soil.N.2, random = ~ 1|Year/Site/Rep, method='ML')
+summary(mod)
+# Fixed effects: PMN ~ Type 
+#                 Value Std.Error  DF  t-value p-value
+# (Intercept)  52.86417  7.655633 110 6.905264   0e+00
+# Typebrassica 26.33354  4.975561 110 5.292577   0e+00
+# Typegrass    21.27176  5.546273 110 3.835326   2e-04
+# Typelegume   20.43583  5.546273 110 3.684605   4e-04
+# Typemix      24.54690  4.754206 110 5.163197   0e+00
+# Typeweed     27.88542  5.745283 110 4.853619   0e+00
+
+tuk <- cld(glht(mod, linfct = mcp(Type = "Tukey")))
+tuk
+# acontrol brassica    grass   legume      mix     weed 
+#      "a"      "b"      "b"      "b"      "b"      "b" 
+
+# by sample date: week 4 (intercept = control)
+mod <-lme(PMN ~ Type, data = Soil.N.4, random = ~ 1|Year/Site/Rep, method='ML')
+summary(mod)
+# Fixed effects: PMN ~ Type 
+#                 Value Std.Error  DF   t-value p-value
+# (Intercept)  61.63625  4.498467 163 13.701612  0.0000
+# Typebrassica 11.86031  4.062945 163  2.919141  0.0040
+# Typegrass     9.65088  4.364426 163  2.211261  0.0284
+# Typelegume    2.48588  4.364426 163  0.569578  0.5697
+# Typemix       8.35706  3.762591 163  2.221093  0.0277
+# Typeweed     14.18094  4.691485 163  3.022697  0.0029
+
+tuk <- cld(glht(mod, linfct = mcp(Type = "Tukey")))
+tuk
+# acontrol brassica    grass   legume      mix     weed 
+#      "a"      "b"     "ab"     "ab"     "ab"      "b" 
+```
+

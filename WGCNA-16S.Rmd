@@ -1,0 +1,416 @@
+---
+title: "WGCNA-16S"
+author: "Eleanor Lucadamo"
+output: html_notebook
+---
+
+This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+r <- getOption("repos")
+r["CRAN"] <- "https://mirror.las.iastate.edu/CRAN/"
+options(repos = r)
+
+```
+
+
+## Load packages
+
+```{r load packages}
+
+library(ggplot2)
+library(WGCNA)
+library(rmarkdown)
+library(BiocManager)
+library(readr)
+
+#load packages
+suppressMessages(library(WGCNA))
+allowWGCNAThreads()
+suppressMessages(library(cluster))
+options(stringsAsFactors = FALSE)
+
+```
+
+
+## Load data
+
+```{r OTU table, metadata, taxonomy table}
+
+# import OTU table, sorted by OTU number (columns) and Sample ID (rows)
+OTU_table <- read.csv(file = "16S_OTUS.csv", header = TRUE)
+# import metadata file, sorted by Sample ID (rows)
+metadata <- read.csv(file = "METADATA_NUMERIC.csv", header = TRUE)
+# import taxonomy assignments, sorted by Sample ID (rows)
+tax <- read.csv(file = "16S_TAXONOMY.csv", header = TRUE)
+```
+
+
+## Clean up data
+
+```{r subset OTU table and metadata}
+# subset metadata file into only the samples with cover crop biomass data
+# column "Biomass" = Yes/No
+biomass_samples <- subset(metadata, metadata$Biomass == "Yes")
+
+samples <- biomass_samples$Sample_ID
+length(samples)
+# [1] 423
+# 423 samples with biomass data
+
+# subset OTU table into just samples with biomass data
+# and rename to be consistent with R object naming
+OTU_table_biomass <- subset(OTU_table, Sample_ID %in% samples)
+otus <- OTU_table_biomass
+# 385 samples (obs) in OTU table
+
+# now subset metadata file with just the samples in "otus" 
+samples <- OTU_table_biomass$Sample_ID
+samples
+meta <- subset(metadata, Sample_ID %in% samples)
+meta$Sample_ID
+
+# make sure rownames line up between meta and otus
+rownames(meta) <- meta$Sample_ID
+rownames(meta)
+
+rownames(otus) <- otus$Sample_ID
+rownames(otus)
+
+rownames(meta) == rownames(otus)
+# YES
+
+# # if no, export to excel and take a look...
+# write.csv(meta, "meta.csv", row.names = TRUE)
+# write.csv(otus, "otus.csv", row.names = TRUE)
+# 
+# # sort by Sample_ID in excel (ascending)
+# # remove "Biomass" column, include numeric data only
+# # replace "." with "-" in Sample ID
+# # re-import
+# meta_sorted <- read.csv("METADATA_NUMERIC_SORTED.csv", header = TRUE)
+# otus_sorted <- read.csv("16S_OTUS_SORTED.csv", header = TRUE)
+# 
+# # make sure rownames line up between meta and otus
+# rownames(meta_sorted) <- meta_sorted$Sample_ID
+# rownames(meta_sorted)
+# 
+# rownames(otus_sorted) <- otus_sorted$Sample_ID
+# rownames(otus_sorted)
+# 
+# rownames(meta_sorted) == rownames(otus_sorted)
+# # YES
+# 
+# # now rename back to original names:
+# meta <- meta_sorted
+# otus <- otus_sorted
+
+# rename meta to metadata
+metadata <- meta
+
+# delete Sample ID column
+metadata <- metadata[,-1]
+
+# delete Biomass column
+metadata <- metadata[,-18]
+
+rownames(metadata) == rownames(otus)
+# YES
+
+# # make sure metadata is numeric
+# metadata$Y2015 <- as.numeric(metadata$Y2015)
+# metadata$Y2016 <- as.numeric(metadata$Y2016)
+# metadata$BLM <- as.numeric(metadata$BLM)
+# metadata$ROCK <- as.numeric(metadata$ROCK)
+# metadata$NO_SPECIES <- as.numeric(metadata$NO_SPECIES)
+# metadata$DAYS <- as.numeric(metadata$DAYS)
+
+```
+
+
+# OTU table transformation
+
+``` {r OTU table transformation}
+
+# need to add offset of 1 to every value to eliminate 0 values prior to log tranformation
+otu <- otus[,-1]
+otu <- otu + 1
+
+# confirm no 0 values
+sum(which(otu == 0))
+# [1] 0
+
+# function to filter out OTUs with abundance < 0.01%
+low.count.removal = function(
+data,
+percent=0.01
+){
+keep.otu = which(colSums(data)*100/(sum(colSums(data))) > percent)
+data.filter = data[,keep.otu]
+return(list(data.filter = data.filter, keep.otu = keep.otu))
+}
+result.filter = low.count.removal(otu, percent=0.01)
+data.filter = result.filter$data.filter
+
+# how many OTUs are retained?
+length(result.filter$keep.otu)
+# [1] 944
+
+# TSS normalization (relative abundance?)
+TSS.divide <- function(x){
+x/sum(x)
+}
+
+TSS <- t(apply(data.filter, 1, TSS.divide))
+
+otu_norm <- log2(TSS)
+rownames(otu_norm)
+
+# check that rownames still match
+rownames(otu_norm) == rownames(metadata)
+# YES
+
+```
+
+
+## Identify and remove outliers
+
+```{r ID and remove outliers, plot dendrogram}
+
+# sample network based on euclidian distance
+A <- adjacency(t(otu_norm), type = "distance")
+head(A)
+
+# whole network connectivity
+k <- as.numeric(apply(A, 2, sum))
+
+# standardized connectivity
+Z.k = scale(k)
+
+# designate samples as outliers if Z.k value is below threshold
+thresholdZ.k <- -5
+outlierColor <- ifelse(Z.k < thresholdZ.k, "red", "black")
+
+# generate cluster tree
+sampleTree <- hclust(as.dist(1-A), method = "average")
+
+otu_norm_good <- goodSamplesGenes(otu_norm, 
+  weights = NULL,
+  minFraction = 1/2, 
+  minNSamples = 1, 
+  minNGenes = 273, 
+  tol = NULL,
+  minRelativeWeight = 0.1,
+  verbose = 1, indent = 0)
+
+envColors = data.frame(numbers2colors(metadata, signed = FALSE))
+dimnames(envColors)[[2]] = paste(names(metadata), "C", sep = "")
+datColors <- data.frame(outlierC = outlierColor, envColors)
+
+#plot the samples dendrogram and the colors underneath
+plotDendroAndColors(sampleTree, groupLabels = names(datColors),
+colors = datColors)
+```
+
+
+## Soft thresholding
+ 
+```{r Soft thresholding}
+
+# Choose a set of soft thresholding powers
+powers = c(1:20)
+
+# choose power based on SFT criterion (for unsigned network)
+sft <- pickSoftThreshold(otu_norm, powerVector = powers)
+
+sft$powerEstimate
+
+par(mfrow = c(1,2))
+
+plot(sft$fitIndices[, 1], -sign(sft$fitIndices[, 3]) * sft$fitIndices[, 2],
+xlab = "soft threshold power",
+ylab = "SFT, signed R^2",
+type = "n",
+main = paste("Scale Independence")
+)
+text(sft$fitIndices[, 1], -sign(sft$fitIndices[, 3]) * sft$fitIndices[, 2], labels = powers, col = abline(h = 0.7, col = "red"))
+     
+# Mean connectivity as a function of different powers
+plot(sft$fitIndices[, 1], sft$fitIndices[, 5],
+xlab = "Soft Threshold (power)",
+ylab = "Mean Connectivity",
+type = "n",
+main = paste("Mean Connectivity")
+)
+text(sft$fitIndices[, 1], sft$fitIndices[, 5], labels = powers, col = "red")
+
+# beta = 5
+# plot levels off
+```
+
+
+## Module detection via dynamic tree cutting
+
+```{r Module detection via dynamic tree cutting, unsigned network}
+
+# minModuleSize = 20
+# beta = SFT = power = 5
+
+mergingThresh = 0.25
+
+net = blockwiseModules(otu_norm, corType = "pearson",
+maxBlockSize = 5000,
+networkType = "unsigned",
+power = 5,
+minModuleSize = 20,
+mergeCutHeight = mergingThresh,
+numericLabels = TRUE,
+saveTOMs = TRUE,
+pamRespectsDendro = FALSE,
+saveTOMFileBase = "TOM_1")
+moduleLabelsAutomatic = net$colors
+
+# Convert labels to colors for plotting
+moduleColorsAutomatic = labels2colors(moduleLabelsAutomatic)
+
+# A data frame with module eigengenes can be obtained as follows
+MEsAutomatic = net$MEs
+blocknumber = 1
+datColors = data.frame(moduleColorsAutomatic)[net$blockGenes[[blocknumber]],]
+
+# Plot the dendrogram and the module colors underneath
+plotDendroAndColors(net$dendrograms[[blocknumber]],
+colors = datColors,
+groupLabels = c("Modules"),
+dendroLabels = FALSE,
+hang = 0.03, addGuide = TRUE,
+guideHang = 0.05)
+
+# 4 modules with 944 OTUs > 0.01% abunance, min module size = 20
+# grey module = unassigned OTUs
+```
+
+
+
+
+## Relate modules to environmental data
+
+```{r relate modules to environmental data}
+
+# Choose a module assignment
+moduleColors = moduleColorsAutomatic
+
+# Define numbers of OTUs and samples
+nOTU = ncol(otu_norm)
+nSamples = nrow(otu_norm)
+
+# Recalculate MEs with color labels
+MEs0 = moduleEigengenes(otu_norm, moduleColors)$eigengenes
+MEs = orderMEs(MEs0)
+modEnvCor = cor(MEs, metadata, use = "p")
+
+## Warning in storage.mode(y) <- "double": NAs introduced by coercion
+modEnvP = corPvalueStudent(modEnvCor, nSamples)
+
+textMatrix = paste(signif(modEnvCor, 2), "\n(", signif(modEnvP, 1), ")", sep = "")
+dim(textMatrix) = dim(modEnvCor)
+par(mar = c(6, 8.5, 3, 3))
+
+# Display the correlation values within a heatmap plot
+labeledHeatmap(Matrix = modEnvCor,
+xLabels = names(metadata),
+yLabels = names(MEs),
+ySymbols = names(MEs),
+colorLabels = FALSE,
+colors = blueWhiteRed(50),
+textMatrix = textMatrix,
+setStdMargins = FALSE,
+cex.text = 0.75, zlim = c(-1, 1),
+main = paste("Module-environmental relationships, min = 20, 16S OTUs"))
+
+# calculate the module membership values (aka. module eigengene based connectivity kME):
+datKME = signedKME(otu_norm, MEs)
+```
+
+
+## Export results
+
+```{r add in taxonomy data, export results}
+
+otu_norm1 <- as.data.frame(otu_norm)
+dim(otu_norm)
+# [1] 385 944
+
+samples <- names(otu_norm1)
+samples
+tax_clean <- subset(tax, OTU_ID %in% samples)
+head(tax_clean$OTU_ID)
+tail(tax_clean$OTU_ID)
+
+rownames(tax_clean) <- tax_clean$OTU_ID
+rownames(tax_clean)
+
+taxa_annot <- as.matrix(tax_clean)
+
+microbes <- names(otu_norm1) 
+
+annotation <- row.names(taxa_annot)
+
+OTU2annot <- match(microbes, annotation)
+
+# data frame with env significances (correlation with the environmental variables) 
+microbe_env <- data.frame(cor(otu_norm1, metadata, use = "p")) 
+
+names(microbe_env) <- paste("cor", names(microbe_env), sep = ".")
+
+datOutput <- data.frame(ProbeID = names(otu_norm1), tax_clean[OTU2annot, ], 
+                       moduleColors, datKME, microbe_env)  
+
+# export as CSV
+write.table(datOutput, "WGCNA_OTU_results.csv", sep = ",")
+
+# export table containing module-env correlations with p-values as CSV
+modEnvCor <- textMatrix
+colnames(modEnvCor) <- names(metadata)
+modEnvCor_df <- data.frame(Module = names(MEs), modEnvCor)
+write.table(modEnvCor, "WGCNA_env_cor.csv", sep = ",")
+
+# produce df with cor and p vals for mod-env correlations and export as CSV
+modEnvCor <- data.frame(Module = names(MEs), modEnvCor)
+modEnvCor_lab <- modEnvCor
+colnames(modEnvCor_lab) <- paste("cor", colnames(modEnvCor), sep = "_")
+modEnvP_lab <- modEnvP
+colnames(modEnvP_lab) <- paste("p", colnames(modEnvP_lab), sep = "_")
+mod_cor_p <- data.frame(Module = names(MEs), modEnvCor_lab, modEnvP_lab)
+write.table(mod_cor_p, "WGCNA_mod_cor_p.csv", sep = ",")
+
+# select modules
+modules <- unique(datColors)
+
+# select module probes
+probes <- names(otu)
+inModule <- is.finite(match(moduleColors,modules))
+modProbes <- probes[inModule]
+match1 <- match(modProbes, taxa_annot)
+
+modOTUs <- taxa_annot[match1]
+
+TOM <- TOMsimilarityFromExpr(otu, power=5)
+
+modTOM <- TOM[inModule, inModule]
+
+dimnames(modTOM) = list(modProbes, modProbes)
+
+# export the network into edge and node list files for Cytoscape (not used in this analysis)
+cyt <- exportNetworkToCytoscape(modTOM,
+edgeFile=paste("CytoEdge", ".txt",sep=""),
+nodeFile=paste("CytoNode", ".txt",sep=""),
+weighted = TRUE,
+threshold = 0.02,
+nodeNames=modProbes,
+altNodeNames = modOTUs,
+nodeAttr = moduleColors[inModule]
+)
+```

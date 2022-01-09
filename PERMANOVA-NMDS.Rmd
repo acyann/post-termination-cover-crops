@@ -1,0 +1,314 @@
+---
+title: "PERMANOVA-NMDS"
+author: "Eleanor Lucadamo"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+## Load packages
+
+```{r load packages}
+
+library(vegan)
+library(ggplot2)
+
+```
+
+## Load data
+
+```{r load 16S data}
+
+All_16S <- read.csv("OTU_METADATA_16S.csv", header = TRUE, check.names = TRUE)
+# This file contains OTU + metadata, NO TAXONOMY DATA, and is transposed (samples as rows)
+
+row.names(All_16S) <- All_16S$X
+dim(All_16S)
+# [1]   527 16182
+
+# remove Sample ID column
+# All_16S <- All_16S[,-1]
+
+# subset OTU data
+data.bac <- All_16S[,10:16182]
+
+# subset metadata
+meta.bac <- All_16S[,1:9]
+
+# set Year, SampleDate as factors
+meta.bac$Year <- factor(meta.bac$Year)
+meta.bac$SampleDate <- factor(meta.bac$SampleDate)
+
+# create YearSiteDate interaction
+meta.bac$YearSiteDate <- interaction(meta.bac$Year, meta.bac$Site, meta.bac$SamplePeriod)
+```
+
+```{r load ITS data}
+
+All_ITS <- read.csv("OTU_METADATA_ITS.csv", header = TRUE, check.names = FALSE)
+# This file contains metadata information, no taxonomy information, transposed
+
+row.names(All_ITS) <- All_ITS$X
+# All <- All[,-1]
+dim(All_ITS)
+# [1]  560 4934
+
+# subset OTU data
+data.fun <- All_ITS[,10:4934]
+
+# subset metadata
+meta.fun <- All_ITS[,1:9]
+
+# set Year, SampleDate as factors
+meta.fun$SampleDate <- factor(meta.fun$SampleDate)
+meta.fun$Year <- factor(meta.fun$Year)
+
+# create YearSiteDate interaction
+meta.fun$YearSiteDate <- interaction(meta.fun$Year, meta.fun$Site, meta.fun$SamplePeriod)
+```
+
+## PERMANOVA 16S
+
+```{r PERMANOVA 16S}
+
+# permanova of site, year, and site*year interaction
+adonis(data.bac ~ Year * Site, meta.bac, method = "bray")
+# 
+# Call:
+# adonis(formula = data.bac ~ Year * Site, data = meta.bac, method = "bray") 
+# 
+# Permutation: free
+# Number of permutations: 999
+# 
+# Terms added sequentially (first to last)
+# 
+#            Df SumsOfSqs MeanSqs F.Model      R2 Pr(>F)    
+# Year        1     5.015  5.0147  32.018 0.05200  0.001 ***
+# Site        1     4.961  4.9608  31.674 0.05144  0.001 ***
+# Year:Site   1     4.547  4.5470  29.032 0.04715  0.001 ***
+# Residuals 523    81.914  0.1566         0.84941           
+# Total     526    96.437                 1.00000           
+# ---
+# Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
+
+# permanova of SamplePeriod, stratified by Site*Year
+adonis(data.bac ~ SamplePeriod, strata = meta.bac$SiteYear, meta.bac, method = "bray")
+# 
+# Call:
+# adonis(formula = data.bac ~ SamplePeriod, data = meta.bac, method = "bray",      strata = meta.bac$SiteYear) 
+# 
+# Blocks:  strata 
+# Permutation: free
+# Number of permutations: 999
+# 
+# Terms added sequentially (first to last)
+# 
+#               Df SumsOfSqs MeanSqs F.Model      R2 Pr(>F)    
+# SamplePeriod   2     1.499 0.74947  4.1367 0.01554  0.001 ***
+# Residuals    524    94.938 0.18118         0.98446           
+# Total        526    96.437                 1.00000           
+# ---
+# Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
+
+# permanova of cover crop type, stratified by Year*Site*SamplePeriod
+adonis(data.bac ~ Type, strata = meta.bac$YearSiteDate, meta.bac, method = "bray")
+# 
+# Call:
+# adonis(formula = data.bac ~ Type, data = meta.bac, method = "bray",      strata = meta.bac$YearSiteDate) 
+# 
+# Blocks:  strata 
+# Permutation: free
+# Number of permutations: 999
+# 
+# Terms added sequentially (first to last)
+# 
+#            Df SumsOfSqs MeanSqs F.Model      R2 Pr(>F)  
+# Type        5     1.336 0.26724  1.4641 0.01386  0.084 .
+# Residuals 521    95.100 0.18253         0.98614         
+# Total     526    96.437                 1.00000         
+# ---
+# Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
+
+```
+
+
+## PERMANOVA ITS
+
+```{r PERMANOVA ITS}
+
+# permanova of site, year, and site*year interaction
+adonis(data.fun ~ Year * Site, meta.fun, method = "bray")
+# 
+# Call:
+# adonis(formula = data.fun ~ Year * Site, data = meta.fun, method = "bray") 
+# 
+# Permutation: free
+# Number of permutations: 999
+# 
+# Terms added sequentially (first to last)
+# 
+#            Df SumsOfSqs MeanSqs F.Model      R2 Pr(>F)    
+# Year        1     8.988  8.9876  50.494 0.06880  0.001 ***
+# Site        1    17.104 17.1043  96.095 0.13094  0.001 ***
+# Year:Site   1     5.569  5.5692  31.289 0.04263  0.001 ***
+# Residuals 556    98.964  0.1780         0.75762           
+# Total     559   130.625                 1.00000           
+# ---
+# Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
+
+# permanova of SamplePeriod, stratified by Site*Year
+adonis(data.fun ~ SamplePeriod, strata = meta.fun$SiteYear, meta.fun, method = "bray")
+# 
+# Call:
+# adonis(formula = data.fun ~ SamplePeriod, data = meta.fun, method = "bray",      strata = meta.fun$SiteYear) 
+# 
+# Blocks:  strata 
+# Permutation: free
+# Number of permutations: 999
+# 
+# Terms added sequentially (first to last)
+# 
+#               Df SumsOfSqs MeanSqs F.Model     R2 Pr(>F)    
+# SamplePeriod   2     5.983 2.99144  13.368 0.0458  0.001 ***
+# Residuals    557   124.642 0.22377         0.9542           
+# Total        559   130.625                 1.0000           
+# ---
+# Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
+
+# permanova of cover crop type, stratified by site*year*sampledate
+adonis(data.fun ~ Type, strata = meta.fun$YearSiteDate, meta.fun, method = "bray")
+# 
+# Call:
+# adonis(formula = data.fun ~ Type, data = meta.fun, method = "bray",      strata = meta.fun$YearSiteDate) 
+# 
+# Blocks:  strata 
+# Permutation: free
+# Number of permutations: 999
+# 
+# Terms added sequentially (first to last)
+# 
+#            Df SumsOfSqs MeanSqs F.Model      R2 Pr(>F)    
+# Type        5     2.446 0.48928  2.1147 0.01873  0.001 ***
+# Residuals 554   128.179 0.23137         0.98127           
+# Total     559   130.625                 1.00000           
+# ---
+# Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
+```
+
+## NMDS 16S
+
+```{r NMDS 16S}
+
+# Transform OTU table (sqrt) and determine best method for calculating distance matrix
+# Print the best method, as determined by rankindex()
+sqrt_t_otu_table <- sqrt(data.bac)
+rank_t_otus <- rankindex(as.matrix(sqrt_t_otu_table), data.bac, indices = c("bray", "euclid", "manhattan", "horn"), method = "spearman")
+print(paste("The highest rank was given by the", names(sort(rank_t_otus, decreasing = TRUE)[1]), "method."))
+# [1] "The highest rank was given by the bray method."
+otus_dist = as.matrix(vegdist(data.bac, "bray"))
+
+# Perform NMDS
+NMDS = metaMDS(otus_dist)
+# Run 0 stress 0.1506893 
+# Run 1 stress 0.1591634 
+# Run 2 stress 0.1657175 
+# Run 3 stress 0.1731793 
+# Run 4 stress 0.1532951 
+# Run 5 stress 0.1587263 
+# Run 6 stress 0.1557621 
+# Run 7 stress 0.1556149 
+# Run 8 stress 0.1552584 
+# Run 9 stress 0.1836325 
+# Run 10 stress 0.163255 
+# Run 11 stress 0.1683892 
+# Run 12 stress 0.1661473 
+# Run 13 stress 0.1621854 
+# Run 14 stress 0.1715576 
+# Run 15 stress 0.1583986 
+# Run 16 stress 0.1712179 
+# Run 17 stress 0.1598968 
+# Run 18 stress 0.1537641 
+# Run 19 stress 0.1678389 
+# Run 20 stress 0.4195487 
+# *** No convergence -- monoMDS stopping criteria:
+#     14: stress ratio > sratmax
+#      6: scale factor of the gradient < sfgrmin
+MDS1 = NMDS$points[,1]
+MDS2 = NMDS$points[,2]
+
+MDS = data.frame(MDS1 = MDS1, MDS2 = MDS2, Sample = meta.bac$Sample_ID,
+                  Site = meta.bac$Site, Treatment = meta.bac$Treatment, SamplePeriod = meta.bac$SamplePeriod,
+                  Year = meta.bac$Year, SiteYear = meta.bac$SiteYear)
+head(MDS)
+MDS$Year <- factor(MDS$Year)
+
+# NMDS plot showing site/year effects in black/white
+ggplot(MDS, aes(x=MDS1, y=MDS2, shape=SiteYear)) +
+  stat_ellipse() +
+  geom_point() +
+  theme_bw() +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+        axis.ticks = element_blank()) +
+  scale_shape_manual(values = c(1,8,0,16))
+```
+
+## NMDS ITS
+
+```{r NMDS ITS}
+
+# Transform OTU table (sqrt) and determine best method for calculating distance matrix
+# Print the best method, as determined by rankindex()
+sqrt_t_otu_table <- sqrt(data.fun)
+rank_t_otus <- rankindex(as.matrix(sqrt_t_otu_table), data.fun, indices = c("bray", "euclid", "manhattan", "horn"), method = "spearman")
+print(paste("The highest rank was given by the", names(sort(rank_t_otus, decreasing = TRUE)[1]), "method."))
+# [1] "The highest rank was given by the bray method."
+otus_dist = as.matrix(vegdist(data.fun, "bray"))
+
+# Perform NMDS
+NMDS = metaMDS(otus_dist)
+# Run 0 stress 0.2073989 
+# Run 1 stress 0.2222117 
+# Run 2 stress 0.2200444 
+# Run 3 stress 0.2213588 
+# Run 4 stress 0.2204486 
+# Run 5 stress 0.2141568 
+# Run 6 stress 0.2208552 
+# Run 7 stress 0.4196519 
+# Run 8 stress 0.2218793 
+# Run 9 stress 0.2237293 
+# Run 10 stress 0.2144992 
+# Run 11 stress 0.2411984 
+# Run 12 stress 0.2245915 
+# Run 13 stress 0.2372838 
+# Run 14 stress 0.2204591 
+# Run 15 stress 0.2238347 
+# Run 16 stress 0.2277931 
+# Run 17 stress 0.222013 
+# Run 18 stress 0.2219661 
+# Run 19 stress 0.2204399 
+# Run 20 stress 0.2222632 
+# *** No convergence -- monoMDS stopping criteria:
+#      1: no. of iterations >= maxit
+#     19: stress ratio > sratmax
+MDS1 = NMDS$points[,1]
+MDS2 = NMDS$points[,2]
+
+MDS = data.frame(MDS1 = MDS1, MDS2 = MDS2, Site = meta.fun$Site, Treatment = meta.fun$Treatment, Year = meta.fun$Year,
+                      Type = meta.fun$Type, Diversity = meta.fun$Diversity, SiteYear = meta.fun$SiteYear, SamplePeriod = meta.fun$SamplePeriod)
+head(MDS)
+
+# plot NMDS showing site/year effects in black/white
+ggplot(MDS, aes(x=MDS1, y=MDS2, shape=SiteYear)) +
+  stat_ellipse() +
+  geom_point() +
+  theme_bw() +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+        axis.ticks = element_blank()) +
+  scale_shape_manual(values = c(1,8,0,16))
+```
